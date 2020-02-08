@@ -6,4 +6,5 @@ fn tests() {
     t.pass("tests/no-pattern-found.rs");
     t.pass("tests/self-position.rs");
     t.pass("tests/types-with-paths.rs");
+    t.pass("tests/use-in-generics.rs");
 }
