@@ -1,31 +1,51 @@
-use crate::as_types::AsTypes;
+use syn::export::Span;
 use syn::visit::Visit;
-use syn::{ItemImpl, Type};
+use syn::{ItemImpl, TypeParen, TypePath};
 
 pub trait FindTypes {
-    fn find_types(&self) -> Vec<Type>;
+    fn find_types(&self) -> Option<(Vec<TypePath>, Span)>;
 }
 
 #[derive(Default)]
 struct FindTypesVisitor {
-    types: Vec<Type>,
+    type_paths: Vec<TypePath>,
+    in_paren: bool,
+    declaration_span: Option<Span>,
 }
 
 impl Visit<'_> for FindTypesVisitor {
-    fn visit_type(&mut self, node: &'_ Type) {
-        if let Some(types) = node.as_types() {
-            self.types = types.into_iter().cloned().collect()
+    fn visit_type_paren(&mut self, node: &TypeParen) {
+        if self.declaration_span.is_some() {
+            return; // early return, we don't support more than one declaration site for now
         }
 
-        syn::visit::visit_type(self, node)
+        self.in_paren = true;
+
+        syn::visit::visit_type_paren(self, node);
+
+        if !self.type_paths.is_empty() {
+            self.declaration_span = Some(node.paren_token.span)
+        }
+
+        self.in_paren = false;
+    }
+
+    fn visit_type_path(&mut self, node: &TypePath) {
+        if self.in_paren {
+            self.type_paths.push(node.clone())
+        }
+
+        syn::visit::visit_type_path(self, node);
     }
 }
 
 impl FindTypes for ItemImpl {
-    fn find_types(&self) -> Vec<Type> {
+    fn find_types(&self) -> Option<(Vec<TypePath>, Span)> {
         let mut visitor = FindTypesVisitor::default();
         visitor.visit_item_impl(self);
 
-        visitor.types
+        visitor
+            .declaration_span
+            .map(|declaration_span| (visitor.type_paths, declaration_span))
     }
 }

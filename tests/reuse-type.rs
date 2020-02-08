@@ -19,6 +19,9 @@ impl GenericFoo<((Bar, Baz))> for Xyz {
 fn main() {
     assert_impls_foo::<Xyz, Bar>();
     assert_impls_foo::<Xyz, Baz>();
+
+    let _bar: Bar = Xyz.do_something();
+    let _baz: Baz = Xyz.do_something();
 }
 
 fn assert_impls_foo<F: GenericFoo<T>, T>() {}

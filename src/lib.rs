@@ -1,8 +1,5 @@
 extern crate proc_macro;
 
-mod as_types;
-mod contains_placeholder;
-mod extract_path;
 mod find_types;
 mod render_with_type;
 
@@ -22,20 +19,18 @@ pub fn impl_template(_: TokenStream, input: TokenStream) -> TokenStream {
         _ => panic!("impl-template can only be used on impl items"),
     };
 
-    let types = template.find_types();
+    let expanded = if let Some((types, declaration_span)) = template.find_types() {
+        let impl_blocks = types
+            .into_iter()
+            .map(|ty| template.render_with_type(ty, declaration_span))
+            .collect::<Vec<_>>();
 
-    let impl_blocks = types
-        .into_iter()
-        .map(|ty| template.render_with_type(ty))
-        .collect::<Vec<_>>();
-
-    let expanded = if impl_blocks.is_empty() {
         quote! {
-            #template
+            #(#impl_blocks)*
         }
     } else {
         quote! {
-            #(#impl_blocks)*
+            #template
         }
     };
 
