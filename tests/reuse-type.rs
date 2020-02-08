@@ -12,7 +12,7 @@ struct Xyz;
 #[impl_template]
 impl GenericFoo<((Bar, Baz))> for Xyz {
     fn do_something(&self) -> __TYPE__ {
-        unimplemented!()
+        __TYPE__
     }
 }
 
