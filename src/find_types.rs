@@ -9,8 +9,9 @@ pub trait FindTypes {
 #[derive(Default)]
 struct FindTypesVisitor {
     type_paths: Vec<TypePath>,
-    in_paren: bool,
     declaration_span: Option<Span>,
+
+    in_paren: bool,
 }
 
 impl Visit<'_> for FindTypesVisitor {

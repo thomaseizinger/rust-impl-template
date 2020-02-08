@@ -19,8 +19,8 @@ pub fn impl_template(_: TokenStream, input: TokenStream) -> TokenStream {
         _ => panic!("impl-template can only be used on impl items"),
     };
 
-    let expanded = if let Some((types, declaration_span)) = template.find_types() {
-        let impl_blocks = types
+    let expanded = if let Some((type_paths, declaration_span)) = template.find_types() {
+        let impl_blocks = type_paths
             .into_iter()
             .map(|ty| template.render_with_type(ty, declaration_span))
             .collect::<Vec<_>>();

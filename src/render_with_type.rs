@@ -3,15 +3,15 @@ use syn::visit_mut::VisitMut;
 use syn::{ItemImpl, Path, Type, TypeParen, TypePath};
 
 pub trait RenderWithType {
-    fn render_with_type(&self, path: TypePath, declaration_site: Span) -> Self;
+    fn render_with_type(&self, type_path: TypePath, declaration_site: Span) -> Self;
 }
 
 impl RenderWithType for ItemImpl {
-    fn render_with_type(&self, path: TypePath, declaration_site: Span) -> Self {
+    fn render_with_type(&self, type_path: TypePath, declaration_site: Span) -> Self {
         let mut new_impl_block = self.clone();
 
         let mut visitor = ReplacePlaceholderVisitor {
-            path,
+            type_path,
             declaration_site,
             replace_current_type: false,
         };
@@ -22,7 +22,7 @@ impl RenderWithType for ItemImpl {
 }
 
 struct ReplacePlaceholderVisitor {
-    path: TypePath,
+    type_path: TypePath,
     declaration_site: Span,
 
     replace_current_type: bool,
@@ -41,7 +41,7 @@ impl VisitMut for ReplacePlaceholderVisitor {
                 .iter()
                 .map(|segment| {
                     if segment.ident == "__TYPE__" {
-                        self.path.path.segments.iter().collect()
+                        self.type_path.path.segments.iter().collect()
                     } else {
                         vec![segment]
                     }
@@ -60,7 +60,7 @@ impl VisitMut for ReplacePlaceholderVisitor {
         syn::visit_mut::visit_type_mut(self, node);
 
         if self.replace_current_type {
-            *node = Type::Path(self.path.clone());
+            *node = Type::Path(self.type_path.clone());
             self.replace_current_type = false;
         }
     }
