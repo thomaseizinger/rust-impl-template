@@ -7,4 +7,5 @@ fn tests() {
     t.pass("tests/self-position.rs");
     t.pass("tests/types-with-paths.rs");
     t.pass("tests/use-in-generics.rs");
+    t.pass("tests/reuse-type.rs");
 }

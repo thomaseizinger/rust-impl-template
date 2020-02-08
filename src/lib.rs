@@ -5,37 +5,30 @@ use quote::quote;
 use syn::parse_macro_input;
 use syn::visit::Visit;
 use syn::visit_mut::VisitMut;
-use syn::Type;
+use syn::Ident;
 use syn::TypeTuple;
 use syn::{Item, TypeParen};
+use syn::{ItemImpl, Type};
 
 #[proc_macro_attribute]
 pub fn impl_template(_: TokenStream, input: TokenStream) -> TokenStream {
     let item = parse_macro_input!(input as Item);
 
-    let item_impl = match item {
+    let template = match item {
         Item::Impl(item_impl) => item_impl,
         _ => panic!("impl-template can only be used on impl items"),
     };
 
-    let mut visitor = FindTypesVisitor::default();
-    visitor.visit_item_impl(&item_impl);
+    let types = FindTypesVisitor::find_types(&template);
 
-    let impl_blocks = visitor
-        .types
+    let impl_blocks = types
         .into_iter()
-        .map(|ty| {
-            let mut new_item_impl = item_impl.clone();
-
-            ReplaceTypeVisitor { ty }.visit_item_impl_mut(&mut new_item_impl);
-
-            new_item_impl
-        })
+        .map(|ty| ImplBlockMaker::make_impl_block(&template, ty))
         .collect::<Vec<_>>();
 
     let expanded = if impl_blocks.is_empty() {
         quote! {
-            #item_impl
+            #template
         }
     } else {
         quote! {
@@ -51,6 +44,15 @@ struct FindTypesVisitor {
     types: Vec<Type>,
 }
 
+impl FindTypesVisitor {
+    fn find_types(template: &ItemImpl) -> Vec<Type> {
+        let mut visitor = FindTypesVisitor::default();
+        visitor.visit_item_impl(&template);
+
+        visitor.types
+    }
+}
+
 impl Visit<'_> for FindTypesVisitor {
     fn visit_type(&mut self, node: &'_ Type) {
         if let Some(types) = parse_double_tuple(node) {
@@ -61,13 +63,29 @@ impl Visit<'_> for FindTypesVisitor {
     }
 }
 
-struct ReplaceTypeVisitor {
+struct ImplBlockMaker {
     ty: Type,
 }
 
-impl VisitMut for ReplaceTypeVisitor {
+impl ImplBlockMaker {
+    fn make_impl_block(template: &ItemImpl, ty: Type) -> ItemImpl {
+        let mut visitor = ImplBlockMaker { ty };
+
+        let mut new_impl_block = template.clone();
+
+        visitor.visit_item_impl_mut(&mut new_impl_block);
+
+        new_impl_block
+    }
+}
+
+impl VisitMut for ImplBlockMaker {
     fn visit_type_mut(&mut self, node: &mut Type) {
         if parse_double_tuple(&node).is_some() {
+            *node = self.ty.clone();
+        }
+
+        if IsPlaceholderVisitor::is_placeholder(&node) {
             *node = self.ty.clone();
         }
 
@@ -86,5 +104,31 @@ fn parse_double_tuple(ty: &Type) -> Option<Vec<&Type>> {
             Some(elems.pairs().map(|pair| pair.into_value()).collect())
         }
         _ => None,
+    }
+}
+
+#[derive(Default)]
+struct IsPlaceholderVisitor {
+    is_placeholder: bool,
+}
+
+impl IsPlaceholderVisitor {
+    fn is_placeholder(ty: &Type) -> bool {
+        let mut visitor = IsPlaceholderVisitor::default();
+
+        visitor.visit_type(ty);
+
+        visitor.is_placeholder
+    }
+}
+
+impl Visit<'_> for IsPlaceholderVisitor {
+    fn visit_ident(&mut self, ident: &'_ Ident) {
+        if self.is_placeholder {
+            // early abort if we already determined that we have a placeholder type
+            return;
+        }
+
+        self.is_placeholder = *ident == "__TYPE__"
     }
 }
