@@ -2,11 +2,12 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::punctuated::Punctuated;
-use syn::{parse_macro_input, GenericArgument, ItemImpl};
+use syn::parse_macro_input;
+use syn::visit::Visit;
+use syn::visit_mut::VisitMut;
+use syn::Type;
+use syn::TypeTuple;
 use syn::{Item, TypeParen};
-use syn::{PathArguments, TypeTuple};
-use syn::{PathSegment, Type};
 
 #[proc_macro_attribute]
 pub fn impl_template(_: TokenStream, input: TokenStream) -> TokenStream {
@@ -17,72 +18,60 @@ pub fn impl_template(_: TokenStream, input: TokenStream) -> TokenStream {
         _ => panic!("impl-template can only be used on impl items"),
     };
 
-    let impl_blocks = make_impl_blocks(&item_impl);
+    let mut visitor = FindTypesVisitor::default();
+    visitor.visit_item_impl(&item_impl);
 
-    let expanded = quote! {
-        #(#impl_blocks)*
+    let impl_blocks = visitor
+        .types
+        .into_iter()
+        .map(|ty| {
+            let mut new_item_impl = item_impl.clone();
+
+            ReplaceTypeVisitor { ty }.visit_item_impl_mut(&mut new_item_impl);
+
+            new_item_impl
+        })
+        .collect::<Vec<_>>();
+
+    let expanded = if impl_blocks.is_empty() {
+        quote! {
+            #item_impl
+        }
+    } else {
+        quote! {
+            #(#impl_blocks)*
+        }
     };
 
     TokenStream::from(expanded)
 }
 
-fn make_impl_blocks(item_impl: &ItemImpl) -> Vec<ItemImpl> {
-    if let Some(types) = parse_double_tuple(&item_impl.self_ty) {
-        return types
-            .into_iter()
-            .map(|ty| {
-                let mut new_impl_block = item_impl.clone();
-
-                new_impl_block.self_ty = Box::new(ty.clone());
-                new_impl_block
-            })
-            .collect();
-    }
-
-    if let Some((never_token, path, for_token)) = &item_impl.trait_ {
-        if let Some(PathSegment { arguments, .. }) = path.segments.single_or_none() {
-            if let PathArguments::AngleBracketed(generic_args) = arguments {
-                if let Some(GenericArgument::Type(ty)) = generic_args.args.single_or_none() {
-                    if let Some(types) = parse_double_tuple(ty) {
-                        return types
-                            .into_iter()
-                            .map(|ty| {
-                                let mut new_impl_block = item_impl.clone();
-
-                                let mut new_path = path.clone();
-
-                                let mut new_generic_args = generic_args.clone();
-                                *new_generic_args.args.last_mut().unwrap() =
-                                    GenericArgument::Type(ty.clone());
-
-                                new_path.segments.last_mut().unwrap().arguments =
-                                    PathArguments::AngleBracketed(new_generic_args);
-
-                                new_impl_block.trait_ = Some((*never_token, new_path, *for_token));
-
-                                new_impl_block
-                            })
-                            .collect();
-                    }
-                }
-            }
-        }
-    }
-
-    vec![item_impl.clone()]
+#[derive(Default)]
+struct FindTypesVisitor {
+    types: Vec<Type>,
 }
 
-trait SingleOrNone<T> {
-    fn single_or_none(&self) -> Option<&T>;
-}
-
-impl<T, P> SingleOrNone<T> for Punctuated<T, P> {
-    fn single_or_none(&self) -> Option<&T> {
-        if self.len() != 1 {
-            return None;
+impl Visit<'_> for FindTypesVisitor {
+    fn visit_type(&mut self, node: &'_ Type) {
+        if let Some(types) = parse_double_tuple(node) {
+            self.types = types.into_iter().cloned().collect()
         }
 
-        self.first()
+        syn::visit::visit_type(self, node)
+    }
+}
+
+struct ReplaceTypeVisitor {
+    ty: Type,
+}
+
+impl VisitMut for ReplaceTypeVisitor {
+    fn visit_type_mut(&mut self, node: &mut Type) {
+        if parse_double_tuple(&node).is_some() {
+            *node = self.ty.clone();
+        }
+
+        syn::visit_mut::visit_type_mut(self, node)
     }
 }
 
