@@ -1,9 +1,13 @@
 [package]
 name = "impl-template"
-version = "1.0.0"
+version = "1.0.0-alpha"
 authors = ["Thomas Eizinger <thomas@eizinger.io>"]
 autotests = false
 edition = "2018"
+license = "MIT/Apache-2.0"
+repository = "https://github.com/thomaseizinger/rust-impl-template"
+documentation = "https://docs.rs/impl-template/"
+description = "A procedural macro for generating impl-blocks based on a simple template."
 
 [lib]
 proc-macro = true
