@@ -11,8 +11,8 @@ struct Xyz;
 
 #[impl_template]
 impl GenericFoo<((Bar, Baz))> for Xyz {
-    fn do_something(&self) -> __TYPE__ {
-        __TYPE__
+    fn do_something(&self) -> __TYPE0__ {
+        __TYPE0__
     }
 }
 

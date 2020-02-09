@@ -1,10 +1,12 @@
 extern crate proc_macro;
 
-mod find_types;
-mod render_with_type;
+mod find_patterns;
+mod render;
 
-use crate::find_types::FindTypes;
-use crate::render_with_type::RenderWithType;
+use crate::find_patterns::{FindPatterns, Pattern};
+use crate::render::Render;
+use crate::render::Replacement;
+use itertools::Itertools;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse_macro_input;
@@ -19,19 +21,48 @@ pub fn impl_template(_: TokenStream, input: TokenStream) -> TokenStream {
         _ => panic!("impl-template can only be used on impl items"),
     };
 
-    let expanded = if let Some((type_paths, declaration_span)) = template.find_types() {
-        let impl_blocks = type_paths
-            .into_iter()
-            .map(|ty| template.render_with_type(ty, declaration_span))
-            .collect::<Vec<_>>();
+    let patterns = template.find_patterns();
 
-        quote! {
-            #(#impl_blocks)*
-        }
-    } else {
-        quote! {
+    if patterns.is_empty() {
+        return TokenStream::from(quote! {
             #template
-        }
+        });
+    }
+
+    let replacements = patterns
+        .into_iter()
+        .enumerate()
+        .map(
+            |(
+                pattern_index,
+                Pattern {
+                    type_paths,
+                    declaration,
+                },
+            )| {
+                type_paths.into_iter().map(move |type_path| Replacement {
+                    pattern_index,
+                    type_path,
+                    declaration,
+                })
+            },
+        )
+        .multi_cartesian_product()
+        .collect::<Vec<_>>();
+
+    let impl_blocks = replacements
+        .into_iter()
+        .map(|r| {
+            let impl_block = template.render(r);
+
+            quote! {
+                #impl_block
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let expanded = quote! {
+        #(#impl_blocks)*
     };
 
     TokenStream::from(expanded)
